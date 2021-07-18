@@ -5,3 +5,4 @@ xmonad.hi
 xmonad.o
 prompt-history
 *.errors
+log.txt
