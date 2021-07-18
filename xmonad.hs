@@ -81,11 +81,11 @@ import XMonad.Prompt
 import XMonad.Prompt.Window
 
 import XMonad.Actions.FloatKeys
-
 import Data.List.Split ( splitOn )
+import Data.Foldable (traverse_)
+
 -- import Data.List ()
 -- import Control.Lens ()
-
 myFont :: String
 myFont = "xft:SauceCodePro Nerd Font Mono:regular:size=9:antialias=true:hinting=true"
 
@@ -127,15 +127,11 @@ myStartupHook = do
           (XS.get :: X HasBooted) >>= myOnceStartupHook . getHasBooted
 
 myOnceStartupHook :: Bool -> X ()
-myOnceStartupHook hasRun = do
+myOnceStartupHook hasRun =
           if hasRun then
             return ()
           else do
             spawnOnce "gromit-mpx --key XF86Mail --undo-key none"
-            spawn "nitrogen --head=0 --set-auto /usr/share/backgrounds/nyewallpaper.png"
-            spawn "nitrogen --head=1 --set-auto /usr/share/backgrounds/nyewallpaper.png"
-            spawn "nitrogen --head=2 --set-auto /usr/share/backgrounds/nyewallpaper.png"
-            spawn "nitrogen restore &"
             addRawWSGroup "1:www" [(S 0, "www1"), (S 2, "www2"), (S 1, "www3")]
             addRawWSGroup "2:dev" [(S 0, "dev1"), (S 2, "dev2"), (S 1, "dev3")]
             addRawWSGroup "3:game" [(S 0, "game1"), (S 2, "game2"), (S 1, "game3")]
@@ -213,7 +209,7 @@ myScratchPads = [ NS "discord" "discord"                                      (c
                 , NS "terminal_3" "alacritty --class terminal_3,terminal_3"   (className =? "terminal_3") terminal_3_hook
                 , NS "terminal_4" "alacritty --class terminal_4,terminal_4"   (className =? "terminal_4") terminal_4_hook
                 , NS "terminal_5" "alacritty --class terminal_5,terminal_5"   (className =? "terminal_5") terminal_5_hook
-                , NS "obs" "obs"                                   (className =? "obs") obsHook
+                , NS "obs" "obs"                                              (className =? "obs") obsHook
                 , NS "msteams" "teams"                                        (className =? "Microsoft Teams - Preview") teamsHook
                 ]
                   where discordHook = customFloating $ rr (1/10) (1/10) (8/10) (8/10)
@@ -301,7 +297,7 @@ myLayoutHook = avoidStruts $ mouseResize $ windowArrange
              where
                myDefaultLayout =     tall
                                  ||| grid
-                                                                 ||| threeRow
+                                 ||| threeRow
 
 myWorkspaces = ["www1","www2","www3","dev1","dev2","dev3","game1","game2","game3"]
 myWorkspaceIndices = M.fromList $ zip myWorkspaces [1..] -- (,) == \x y -> (x,y)
@@ -406,7 +402,6 @@ fixDWSGroup s =
 createDWSGroup :: String -> M.Map String WorkspaceId -> X ()
 createDWSGroup s map = do
   let i = nextWSId (M.keys map)
-  -- let i = M.elems map
   let fullName = i ++ ":" ++ s
   let wname1 = s ++ "1"
   let wname2 = s ++ "2"
@@ -420,7 +415,7 @@ createDWSGroup s map = do
   XS.put (WSGroupMap m1)
   return ()
 
-nextWSId :: [String] -> String 
+nextWSId :: [String] -> String
 nextWSId strings = do
   let splitArr = map (splitOn ":") strings
   let split = map head splitArr
@@ -432,10 +427,10 @@ minout = minoutaux 1
     where
     minoutaux :: Int -> [Int] -> Int -- \list base -> smallest integer >= base not occuring in list
     minoutaux base [] = base
-    minoutaux base [x] = base + (if x==base then 1 else 0)
-    minoutaux base xs = if (length smallpart == n2) then  minoutaux (base+n2) bigpart else minoutaux base smallpart
+    minoutaux base [x] = base + (if x==base then 2 else 1)
+    minoutaux base xs = if length smallpart == n2 then  minoutaux (base+n2) bigpart else minoutaux base smallpart
         where
-        n = (length xs)
+        n = length xs
         n2 = n `div` 2
         smallpart = [x | x <- xs , base <= x , x < base + n2]
         bigpart = [x | x <- xs, base + n2 <= x, x < base + n]
@@ -455,8 +450,8 @@ feedPopulateWSGroupMap =
 populateWSGroupMap :: M.Map String WorkspaceId -> X ()
 populateWSGroupMap map = do
   let m1 = M.insert "1:www" "www2" map
-  let m2 = M.insert "2:dev" "dev5" m1
-  let m3 = M.insert "3:game" "game8" m2
+  let m2 = M.insert "2:dev" "dev2" m1
+  let m3 = M.insert "3:game" "game2" m2
   XS.put (WSGroupMap m3)
   return ()
 
@@ -487,11 +482,11 @@ shiftWindowToWSGroup s map = do
     return ()
 
 feedPromptDeleteWSGroup :: XPConfig -> String -> X ()
-feedPromptDeleteWSGroup xp s = do
+feedPromptDeleteWSGroup xp s =
   (XS.get :: X WSGroupMap) >>= promptDeleteWSGroup xp s . getWSGroupMap
 
 promptDeleteWSGroup :: XPConfig -> String -> M.Map String WorkspaceId -> X ()
-promptDeleteWSGroup xp s map = do
+promptDeleteWSGroup xp s map =
   mkXPrompt (SWSGPrompt s) xp (mkComplFunFromList' xp (M.keys map)) feedDeleteWSGroup
 
 feedDeleteWSGroup :: String -> X ()
@@ -507,6 +502,40 @@ feedDeleteWSGroupMap s map = do
 
 getXWorkspaceId :: WorkspaceId -> X WorkspaceId
 getXWorkspaceId = return
+
+{-
+-- | Execute an 'X' action for each window on the current workspace.
+withAllVisible :: (Window -> X ()) -> X ()
+withAllVisible f = do
+  withWindowSet $ \ws -> let all' = W.integrate' . W.stack . W.workspace . W.current $ ws
+    in forM_ all' f
+  withWindowSet $ \ws -> let all' = W.integrate' . W.stack . W.workspace . W.visible $ ws
+    in forM_ all' f
+  -- map (\wvis -> (withWindowSet $ \ws -> let all' = W.integrate' . W.stack . W.workspace . wvis $ ws in forM_ all' f)) (W.visible)
+  -- map (forStackSet f) (W.visible (W.StackSet i l a sid sd))
+  return ()
+-}
+
+{-
+-- For every window on the visible workspaces, execute an 'X' action.
+withAllVisible :: (Window -> X ()) -> X ()
+withAllVisible f = do
+  let screens = W.screens
+  traverse_ screens $ \scr -> do
+    let workspace = W.workspace scr
+    withWindowSet $ \ws -> let all' = W.integrate' . W.stack . workspace $ ws
+      in forM_ all' f
+-- withWindowSet $ \ws -> let all' = W.integrate' . W.stack . W.workspace . stackSetWorkspace $ ws
+-- in forM_ all' f
+-}
+-- forStackSet :: (Window -> X ()) -> W.StackSet (*) (*) (*) (*) (*) -> X ()
+-- forStackSet = do
+--   return ()
+-- forStackSet :: (W.StackSet i l a sid sd -> Screen i l a sid sd) -> (Window -> X ()) -> X ()
+-- forStackSet wvis f = do
+--   withWindowSet $ \ws -> let all' = W.integrate' . W.stack . W.workspace . W.current $ ws
+--     in forM_ all' f
+--   return ()
 
 toggleFloat w = windows (\s -> if M.member w (W.floating s)
                             then W.sink w s
